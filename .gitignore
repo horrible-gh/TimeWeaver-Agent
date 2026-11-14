@@ -1,0 +1,10 @@
+/dist/
+/log/
+/backups/
+/conf/*.json
+!/conf/*.sample.json
+*.lock
+*.test
+*.exe
+coverage.out
+.DS_Store

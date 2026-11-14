@@ -1,61 +1,61 @@
 # TimeWeaver Agent
 
-TimeWeaver의 독립형 Go Agent. 서버·웹은 기존 [TimeWeaver](https://github.com/horrible-gh/TimeWeaver)를 사용합니다. Python이나 가상환경 없이 실행하며, Go 외부 모듈 의존성은 없습니다.
+A standalone Go agent for TimeWeaver. The server and web interface remain in the existing [TimeWeaver](https://github.com/horrible-gh/TimeWeaver) project. The agent runs without Python or a virtual environment and has no external Go module dependencies.
 
-**초기 Go 구현입니다.** 모의 서버 통합 테스트와 Linux 실행 테스트를 포함합니다. 실제 운영 서버 교체 및 Windows 프로세스 제어 검증은 별도로 진행해야 합니다. 기존 Python Agent는 자동으로 변경·중지하지 않습니다.
+**This is the initial Go implementation.** It includes mock-server integration tests and Linux runtime tests. Production server migration and Windows process-control verification must be performed separately. The existing Python agent is not modified or stopped automatically.
 
-## 빌드
+## Build
 
-Go 언어 기준은 1.23 이상입니다. 배포 빌드에는 현재 지원되는 Go toolchain을 사용하세요.
+The minimum Go language version is 1.23. Use a currently supported Go toolchain for release builds.
 
 ```sh
-# Linux: 기본적으로 git pull --ff-only 후 빌드
+# Linux: runs git pull --ff-only before building by default
 bash scripts/build.sh
-# 현재 checkout만 빌드
+# Build only the current checkout
 bash scripts/build.sh --no-pull
 ```
 
 ```powershell
-# Windows: 실행 중인 Agent는 SpawnPoint에서 먼저 중지
+# Windows: stop the running agent in SpawnPoint before building
 .\scripts\build.ps1
 .\scripts\build.ps1 -NoPull
 ```
 
-결과: `dist/timeweaver-agent` 또는 `dist/timeweaver-agent.exe`.
+Output: `dist/timeweaver-agent` or `dist/timeweaver-agent.exe`.
 
-## 새 장치
+## Set Up a New Device
 
 ```sh
 ./dist/timeweaver-agent init --server https://timeweaver.example.com/time_weaver --device batch-01
-TIMEWEAVER_ENROLLMENT_TOKEN='발급받은 일회용 토큰' ./dist/timeweaver-agent run
+TIMEWEAVER_ENROLLMENT_TOKEN='your-one-time-enrollment-token' ./dist/timeweaver-agent run
 ```
 
-서버 주소에는 실제 배포의 context path를 포함합니다. 등록 정보가 없을 때만 자동 등록하고 이후에는 저장된 인증 정보를 사용합니다. 토큰을 명령행 인자나 설정 파일에 저장하지 않습니다.
+Include the deployment's context path in the server URL. The agent enrolls automatically only when no stored credentials exist; subsequent runs use the saved credentials. Do not pass the token as a command-line argument or store it in a configuration file.
 
-등록 후에는 다음 명령만 실행합니다.
+After enrollment, start the agent with:
 
 ```sh
 ./dist/timeweaver-agent run
 ```
 
-Windows에서는 SpawnPoint의 환경변수 설정 또는 PowerShell의 `$env:TIMEWEAVER_ENROLLMENT_TOKEN`으로 최초 토큰을 전달합니다. 등록 성공 후 시작 환경에서 일회용 토큰을 제거하세요.
+On Windows, provide the initial token through SpawnPoint's environment-variable settings or PowerShell's `$env:TIMEWEAVER_ENROLLMENT_TOKEN`. Remove the one-time token from the startup environment after successful enrollment.
 
-## 기존 Python Agent 교체
+## Replace an Existing Python Agent
 
-기존 Agent를 먼저 중지하고 미전송 결과가 없는지 확인합니다. **가장 단순한 전환은 작업 디렉터리를 기존 `TimeWeaver/agent`로 유지하고 실행 파일만 Go 바이너리로 교체하는 것입니다.**
+Stop the existing agent first and make sure there are no undelivered results. **The simplest migration is to keep the existing `TimeWeaver/agent` working directory and replace only the executable with the Go binary.**
 
-| SpawnPoint 항목 | 값 |
+| SpawnPoint Setting | Value |
 |---|---|
-| 실행 파일 | 새 `TimeWeaver-Agent/dist/timeweaver-agent[.exe]`의 절대 경로 |
-| 인자 | `run --config conf/time_weaver.json` |
-| 작업 디렉터리 | 기존 Python Agent의 작업 디렉터리 |
-| OS 계정 | 기존 Agent와 동일 계정 |
+| Executable | Absolute path to the new `TimeWeaver-Agent/dist/timeweaver-agent[.exe]` |
+| Arguments | `run --config conf/time_weaver.json` |
+| Working directory | The existing Python agent's working directory |
+| OS account | The same account used by the existing agent |
 
-기존 `conf/time_weaver.json`과 `conf/agent_credential.json`을 그대로 읽습니다. 유효한 인증 파일이 있으면 재등록하지 않습니다. `conf/server.json`의 Python 로깅 설정은 사용하지 않으며, 로그는 stderr로 출력합니다.
+The agent reads the existing `conf/time_weaver.json` and `conf/agent_credential.json` files without conversion. It does not re-enroll when a valid credential file is available. Python logging settings in `conf/server.json` are not used; logs are written to stderr.
 
-**Python과 Go Agent를 같은 장치 인증 정보로 동시에 실행하지 마세요.** Go의 파일 잠금은 Go Agent끼리의 중복 실행만 막습니다. Python 프로세스는 직접 중지해야 합니다.
+**Do not run the Python and Go agents simultaneously with the same device credentials.** The Go file lock prevents duplicate Go agent instances only. You must stop the Python process separately.
 
-## 진단 및 테스트
+## Diagnostics and Tests
 
 ```sh
 ./dist/timeweaver-agent check
@@ -64,12 +64,12 @@ go test -race ./...
 go vet ./...
 ```
 
-`check`는 설정·인증 파일만 읽으며 네트워크 접속, 등록, 삭제를 하지 않습니다. 상대 경로는 모두 **프로세스 작업 디렉터리** 기준입니다. `--config`만 절대 경로로 지정해도 나머지 상대 경로의 기준은 바뀌지 않습니다.
+`check` only reads configuration and credential files. It does not make network requests, enroll a device, or delete files. All relative paths are resolved against the **process working directory**. Specifying an absolute path for `--config` does not change the base directory for other relative paths.
 
-## 범위
+## Scope
 
-등록·토큰 갱신, heartbeat, 스냅샷 동기화, 정기·수동 실행, 결과 FIFO 재전송, 명령/복사/ZIP/housekeep를 구현합니다. 서버 API·DB·웹, FlowGate-Agent, Docker, OS 서비스 등록은 변경하지 않습니다.
+The agent implements enrollment and token refresh, heartbeats, snapshot synchronization, scheduled and manual execution, FIFO result retries, and command/copy/ZIP/housekeep tasks. This implementation does not change the server API, database, web interface, FlowGate-Agent, Docker setup, or OS service registration.
 
-정리 정책을 확대하지 않습니다. `housekeep`는 기존처럼 지정 경로 바로 아래의 오래된 파일을 정리하며, 디렉터리 재귀 삭제·실행 중 파일 보호·임의의 `/tmp` 탐색 기능이 아닙니다.
+The cleanup policy is unchanged. As in the Python agent, `housekeep` removes old files directly inside the specified directory. It does not recursively delete directories, protect files that are in use, or scan arbitrary locations under `/tmp`.
 
-[설계](docs/architecture.md) · [호환성과 운영 주의사항](docs/compatibility.md) · [검증 기록](docs/verification.md)
+[Architecture](docs/architecture.md) · [Compatibility and Operational Notes](docs/compatibility.md) · [Verification Record](docs/verification.md)

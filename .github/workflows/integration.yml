@@ -19,13 +19,41 @@ jobs:
           ref: main
           path: TimeWeaver
           persist-credentials: false
-      - name: Collect validation sources
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 'stable'
+          cache: false
+      - name: Prepare Python test dependencies
         run: |
-          git -C TimeWeaver-Agent rev-parse HEAD > agent-revision.txt
-          git -C TimeWeaver rev-parse HEAD > server-revision.txt
-          tar --exclude=.git -czf validation-sources.tar.gz TimeWeaver TimeWeaver-Agent agent-revision.txt server-revision.txt
+          python -m pip download -d wheels -r TimeWeaver/server/requirements.txt apscheduler==3.11.0 requests==2.32.4 pytest
+          python -m pip install --no-index --find-links wheels -r TimeWeaver/server/requirements.txt apscheduler==3.11.0 requests==2.32.4 pytest
       - uses: actions/upload-artifact@v4
         with:
-          name: validation-sources
-          path: validation-sources.tar.gz
+          name: python-test-dependencies
+          path: wheels/
           retention-days: 1
+      - name: Server and legacy agent regression tests
+        working-directory: TimeWeaver
+        env:
+          TIMEWEAVER_CONTRACT_SNAPSHOT: ${{ github.workspace }}/housekeep-contract.json
+        run: python -m pytest server/tests agent/tests -q
+      - name: Client tests and production build
+        working-directory: TimeWeaver/client
+        run: |
+          node --test tests/*.test.mjs
+          npm ci
+          npm run build
+      - name: Go agent and server snapshot contract
+        working-directory: TimeWeaver-Agent
+        run: |
+          if [ -f ../housekeep-contract.json ]; then
+            export TIMEWEAVER_CONTRACT_SNAPSHOT="$GITHUB_WORKSPACE/housekeep-contract.json"
+          fi
+          go test -race ./...
+          go vet ./...

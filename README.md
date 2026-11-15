@@ -1,61 +1,107 @@
 # TimeWeaver Agent
 
-A standalone Go agent for TimeWeaver. The server and web interface remain in the existing [TimeWeaver](https://github.com/horrible-gh/TimeWeaver) project. The agent runs without Python or a virtual environment and has no external Go module dependencies.
+A standalone Go agent for [TimeWeaver](https://github.com/horrible-gh/TimeWeaver). No Python, virtual environment, database credentials or external Go modules are required.
 
-**This is the initial Go implementation.** It includes mock-server integration tests and Linux runtime tests. Production server migration and Windows process-control verification must be performed separately. The existing Python agent is not modified or stopped automatically.
+## First-time setup
 
-## Build
+In the TimeWeaver web interface, open **Devices > Agent registration**, choose the group and device name, and issue a registration token. Then run **one command** in the `TimeWeaver-Agent` checkout:
 
-The minimum Go language version is 1.23. Use a currently supported Go toolchain for release builds.
+**Linux**
 
 ```sh
-# Linux: runs git pull --ff-only before building by default
-bash scripts/build.sh
-# Build only the current checkout
+bash setup.sh
+```
+
+**Windows PowerShell**
+
+```powershell
+.\setup.ps1
+```
+
+The script builds the agent and opens the setup wizard:
+
+```text
+TimeWeaver Agent Setup
+Server URL: https://timeweaver.example.com
+Device name [your-hostname]: batch-01
+Enrollment token (hidden):
+Registering...
+Registered. Credentials saved. Setup complete.
+```
+
+Use the same device name as the token issued by the web interface. The token is hidden while typing or pasting; press Enter to submit it. Setup saves connection settings and the resulting credential, not the enrollment token. A bare server origin receives the default `/time_weaver` context path; an explicit custom path is preserved.
+
+Go 1.23 or newer must already be installed to build from source. Setup builds the current checkout; it does not pull, install an OS service, or start a second agent. Stop an existing agent before rebuilding on Windows.
+
+Already have a binary? Run `timeweaver-agent setup` directly. Plain `init` also opens the wizard. An interactive first `run` (or launch without arguments) opens setup when configuration or credentials are missing, then starts the agent. Non-interactive service launches never wait for input.
+
+## Start
+
+```sh
+bash run.sh
+```
+
+```powershell
+.\run.ps1
+```
+
+These wrappers select the repository working directory automatically. Direct execution is also supported: `./dist/timeweaver-agent run` or `.\dist\timeweaver-agent.exe run`.
+
+For SpawnPoint, setup prints the actual executable, arguments and working directory to enter. Use the **same OS account** that completed registration. Do not put the one-time token into the permanent startup command/environment.
+
+| SpawnPoint setting | Value |
+|---|---|
+| Executable | Absolute path to `TimeWeaver-Agent/dist/timeweaver-agent[.exe]` |
+| Arguments | `run --config conf/time_weaver.json` |
+| Working directory | The `TimeWeaver-Agent` checkout used for setup |
+| OS account | The account used for setup |
+
+## Repeat setup / recover
+
+Run the same setup command again. A valid stored registration is reused without spending a new token or changing existing settings. If enrollment failed, connection settings are kept so setup can resume. Expired registration requires confirmation before replacement. Unreadable or mismatched credentials are not deleted automatically.
+
+For a registration that was revoked on the server, stop the agent, issue a fresh token, and use `timeweaver-agent setup --replace`. `enroll --replace` is also available and prompts for the token. Do not run two agents with the same credentials.
+
+A server/device change must use a separate working directory, or an intentional recovery of the original configuration; setup never silently pairs old credentials with a new server/device.
+
+## Automation and compatibility
+
+Interactive hidden input is recommended. Scripts can provide the existing enrollment-token environment variable (default `TIMEWEAVER_ENROLLMENT_TOKEN`):
+
+```sh
+TIMEWEAVER_ENROLLMENT_TOKEN='one-time-token' ./dist/timeweaver-agent setup \
+  --server https://timeweaver.example.com/time_weaver --device batch-01
+```
+
+`setup --token TOKEN` and `enroll --token TOKEN` are also supported. A command-line token may be visible in process listings and shell history. Neither method stores the enrollment token in the configuration. An existing custom `api.enrollment_token_env` remains supported.
+
+Legacy `init --server URL [--device NAME]` remains configuration-only and refuses to overwrite a file. Use `setup` for the complete connection-and-registration flow.
+
+## Build / update
+
+```sh
+git pull --ff-only
+bash setup.sh
+# Or build without running setup:
 bash scripts/build.sh --no-pull
 ```
 
 ```powershell
-# Windows: stop the running agent in SpawnPoint before building
-.\scripts\build.ps1
+git pull --ff-only
+.\setup.ps1
+# Or build without running setup:
 .\scripts\build.ps1 -NoPull
 ```
 
-Output: `dist/timeweaver-agent` or `dist/timeweaver-agent.exe`.
+The existing build scripts still pull with `--ff-only` when invoked without `--no-pull` / `-NoPull`. Output is `dist/timeweaver-agent[.exe]`.
 
-## Set Up a New Device
+## Replace an existing Python agent
 
-```sh
-./dist/timeweaver-agent init --server https://timeweaver.example.com/time_weaver --device batch-01
-TIMEWEAVER_ENROLLMENT_TOKEN='your-one-time-enrollment-token' ./dist/timeweaver-agent run
-```
+Stop the Python agent and ensure results have been delivered. Keep its working directory and OS account; in SpawnPoint replace only the executable with the Go binary, with arguments `run --config conf/time_weaver.json`.
 
-Include the deployment's context path in the server URL. The agent enrolls automatically only when no stored credentials exist; subsequent runs use the saved credentials. Do not pass the token as a command-line argument or store it in a configuration file.
+The existing `conf/time_weaver.json` and `conf/agent_credential.json` are read without conversion or re-enrollment. Python logging settings in `conf/server.json` are not used; logs go to stderr. The Go lock does not stop the Python process: stop it separately. The repository-root `run.sh` / `run.ps1` wrappers are for new installations, not migrations retaining the old Python working directory.
 
-After enrollment, start the agent with:
-
-```sh
-./dist/timeweaver-agent run
-```
-
-On Windows, provide the initial token through SpawnPoint's environment-variable settings or PowerShell's `$env:TIMEWEAVER_ENROLLMENT_TOKEN`. Remove the one-time token from the startup environment after successful enrollment.
-
-## Replace an Existing Python Agent
-
-Stop the existing agent first and make sure there are no undelivered results. **The simplest migration is to keep the existing `TimeWeaver/agent` working directory and replace only the executable with the Go binary.**
-
-| SpawnPoint Setting | Value |
-|---|---|
-| Executable | Absolute path to the new `TimeWeaver-Agent/dist/timeweaver-agent[.exe]` |
-| Arguments | `run --config conf/time_weaver.json` |
-| Working directory | The existing Python agent's working directory |
-| OS account | The same account used by the existing agent |
-
-The agent reads the existing `conf/time_weaver.json` and `conf/agent_credential.json` files without conversion. It does not re-enroll when a valid credential file is available. Python logging settings in `conf/server.json` are not used; logs are written to stderr.
-
-**Do not run the Python and Go agents simultaneously with the same device credentials.** The Go file lock prevents duplicate Go agent instances only. You must stop the Python process separately.
-
-## Diagnostics and Tests
+## Diagnostics and tests
 
 ```sh
 ./dist/timeweaver-agent check
@@ -64,12 +110,14 @@ go test -race ./...
 go vet ./...
 ```
 
-`check` only reads configuration and credential files. It does not make network requests, enroll a device, or delete files. All relative paths are resolved against the **process working directory**. Specifying an absolute path for `--config` does not change the base directory for other relative paths.
+`check` is local and read-only: no network requests, enrollment or deletion. All relative paths use the **process working directory**, including when `--config` itself is absolute.
 
-## Scope
+## Scope and verification boundary
 
-The agent implements enrollment and token refresh, heartbeats, snapshot synchronization, scheduled and manual execution, FIFO result retries, and command/copy/ZIP/housekeep tasks. This implementation does not change the server API, database, web interface, FlowGate-Agent, Docker setup, or OS service registration.
+The agent implements enrollment/token refresh, heartbeat and snapshot synchronization, scheduled/manual execution, FIFO result retries, and command/copy/ZIP/housekeep tasks. It does not alter the server API, database, FlowGate-Agent, Docker or OS service registration.
 
-The cleanup policy is unchanged. As in the Python agent, `housekeep` removes old files directly inside the specified directory. It does not recursively delete directories, protect files that are in use, or scan arbitrary locations under `/tmp`.
+Mock-server tests do not establish a successful connection to your production server. Windows build/tests do not substitute for verification of your actual SpawnPoint account, console and process-control environment.
 
-[Architecture](docs/architecture.md) · [Compatibility and Operational Notes](docs/compatibility.md) · [Verification Record](docs/verification.md)
+`housekeep` retains its existing behavior: old files directly inside the specified directory only, without recursion or in-use-file protection. Do not aim it at arbitrary locations under `/tmp`.
+
+[Architecture](docs/architecture.md) · [Compatibility](docs/compatibility.md) · [Verification](docs/verification.md)

@@ -1,0 +1,31 @@
+name: Server-agent integration
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: TimeWeaver-Agent
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          repository: horrible-gh/TimeWeaver
+          ref: main
+          path: TimeWeaver
+          persist-credentials: false
+      - name: Collect validation sources
+        run: |
+          git -C TimeWeaver-Agent rev-parse HEAD > agent-revision.txt
+          git -C TimeWeaver rev-parse HEAD > server-revision.txt
+          tar --exclude=.git -czf validation-sources.tar.gz TimeWeaver TimeWeaver-Agent agent-revision.txt server-revision.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: validation-sources
+          path: validation-sources.tar.gz
+          retention-days: 1

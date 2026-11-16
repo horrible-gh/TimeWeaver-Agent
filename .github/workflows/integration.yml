@@ -19,6 +19,16 @@ jobs:
           ref: main
           path: TimeWeaver
           persist-credentials: false
+      - name: Preserve exact validation sources
+        run: |
+          git -C TimeWeaver-Agent rev-parse HEAD > agent-revision.txt
+          git -C TimeWeaver rev-parse HEAD > server-revision.txt
+          tar --exclude=.git -czf validation-sources.tar.gz TimeWeaver TimeWeaver-Agent agent-revision.txt server-revision.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: validation-sources
+          path: validation-sources.tar.gz
+          retention-days: 1
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
@@ -38,22 +48,28 @@ jobs:
           name: python-test-dependencies
           path: wheels/
           retention-days: 1
-      - name: Server and legacy agent regression tests
+      - name: Server regression tests and snapshot export
         working-directory: TimeWeaver
         env:
           TIMEWEAVER_CONTRACT_SNAPSHOT: ${{ github.workspace }}/housekeep-contract.json
-        run: python -m pytest server/tests agent/tests -q
+        run: python -m pytest server/tests -q
+      - name: Legacy agent regression tests
+        if: ${{ !cancelled() }}
+        working-directory: TimeWeaver
+        run: python -m pytest agent/tests -q
       - name: Client tests and production build
+        if: ${{ !cancelled() }}
         working-directory: TimeWeaver/client
         run: |
           node --test tests/*.test.mjs
           npm ci
           npm run build
       - name: Go agent and server snapshot contract
+        if: ${{ !cancelled() }}
         working-directory: TimeWeaver-Agent
+        env:
+          TIMEWEAVER_CONTRACT_SNAPSHOT: ${{ github.workspace }}/housekeep-contract.json
         run: |
-          if [ -f ../housekeep-contract.json ]; then
-            export TIMEWEAVER_CONTRACT_SNAPSHOT="$GITHUB_WORKSPACE/housekeep-contract.json"
-          fi
+          test -s "$TIMEWEAVER_CONTRACT_SNAPSHOT"
           go test -race ./...
           go vet ./...

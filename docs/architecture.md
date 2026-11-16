@@ -17,7 +17,7 @@
 | `internal/credential` | 최초 등록, 단일 동시 토큰 갱신, 인증 파일 호환 |
 | `internal/securefile` | 원자적 파일 교체, OS 권한, 단일 인스턴스 잠금 |
 | `internal/cron` | 7개 필드 AND 판정, 월요일=0, 60초 misfire 범위 |
-| `internal/tasks` | 셸 명령, 파일 복사, ZIP, 비재귀 housekeep |
+| `internal/tasks` | 셸 명령, 파일 복사, ZIP, 기본 비재귀·선택적 재귀 housekeep |
 | `internal/agent` | 상태, 독립 통신 루프, 실행 컨텍스트, 결과 outbox |
 
 업무 실행기는 HTTP를 모르고, HTTP 클라이언트는 스케줄러와 파일을 모른다. 테스트는 이 두 경계에 작은 인터페이스를 넣는다. 구체적인 동작이 없는 추상 클래스나 확장 포인트는 만들지 않는다.
@@ -54,6 +54,8 @@ access token은 메모리에만 둔다. 기존 Python과 같은 schema-1 refresh
 
 ## 정리 작업의 경계
 
-housekeep는 Python의 `os.listdir` + mtime + `os.remove` 의미를 유지한다. 기간은 86400초 단위다. 실제 디렉터리의 재귀 삭제, 사용 중 파일 판정, 임의 `/tmp` 폴더 탐색은 하지 않는다. 큰 보관 일수의 duration 오버플로로 최근 파일을 삭제하지 않도록 초 단위 비교를 사용한다.
+housekeep는 기본적으로 Python의 `os.listdir` + mtime + `os.remove` 의미를 유지한다. 서버 작업의 `house_keep_recursive`가 true일 때만 하위 폴더의 일반 파일을 순회한다. 기간은 86400초 단위이며 파일별 수정 시각으로 판단한다. 디렉터리·심볼릭 링크·Windows junction/reparse point·특수 파일은 재귀 모드에서 보존한다. 큰 보관 일수의 duration 오버플로로 최근 파일을 삭제하지 않도록 초 단위 비교를 사용한다.
+
+에이전트는 `X-TW-Agent-Capabilities: housekeep_recursive_v1`을 보내며, 서버는 지원하지 않는 에이전트에 재귀 작업을 전달하지 않는다. 구버전 서버가 필드를 생략하면 false로 처리한다. 사용 중 파일 판정이나 동시 경로 교체에 대한 보안 샌드박스는 제공하지 않는다.
 
 이 Agent는 OS 계정의 권한으로 명령을 실행한다. 샌드박스가 아니며 root/Administrator 실행을 요구하지 않는다.

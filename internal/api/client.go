@@ -19,6 +19,9 @@ import (
 )
 
 const Prefix = "/api/agent/v1"
+
+// Advertise only implemented behavior; the server gates opt-in task delivery.
+const Capabilities = "housekeep_recursive_v1"
 const maxResponse = 16 << 20
 
 type Error struct {
@@ -44,7 +47,7 @@ func Retryable(err error) bool {
 }
 func AuthFailure(err error) bool {
 	switch Code(err) {
-	case "invalid_token", "token_expired", "needs_enrollment", "device_inactive", "device_revoked", "credential_persist_failed":
+	case "invalid_token", "token_expired", "needs_enrollment", "device_inactive", "device_revoked", "credential_persist_failed", "agent_upgrade_required":
 		return true
 	}
 	return false
@@ -79,6 +82,7 @@ func (c *Client) Request(ctx context.Context, method, path, token string, body a
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("X-TW-Agent-Version", c.Version)
 	req.Header.Set("X-TW-Schema-Version", "1")
+	req.Header.Set("X-TW-Agent-Capabilities", Capabilities)
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}

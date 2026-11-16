@@ -118,6 +118,21 @@ The agent implements enrollment/token refresh, heartbeat and snapshot synchroniz
 
 Mock-server tests do not establish a successful connection to your production server. Windows build/tests do not substitute for verification of your actual SpawnPoint account, console and process-control environment.
 
-`housekeep` retains its existing behavior: old files directly inside the specified directory only, without recursion or in-use-file protection. Do not aim it at arbitrary locations under `/tmp`.
+`housekeep` is non-recursive by default. In TimeWeaver **Tasks > Housekeep**, enable
+**Include subfolders** to apply retention to regular files at every depth. Directories
+(including empty ones), symbolic links, Windows junctions/reparse points and special
+files are preserved. Files are judged individually by modification time; an old
+folder never causes its newer files to be deleted. The selected root cannot be a
+link. Permission errors fail the task, and cancellation is checked while walking.
+
+Update/build and restart this agent **before** enabling the option on the updated
+server. It advertises `housekeep_recursive_v1`; the server rejects recursive task
+saves and snapshots for agents without support. Existing settings and credentials
+are reused; no re-enrollment is needed. Both scheduled and manual runs use the flag.
+An older server that omits `house_keep_recursive` keeps the previous behavior.
+
+Housekeeping does not detect files in use or provide a filesystem security sandbox
+against concurrent directory replacement. Use a dedicated cleanup directory owned
+by the agent account, not arbitrary locations under `/tmp`.
 
 [Architecture](docs/architecture.md) · [Compatibility](docs/compatibility.md) · [Verification](docs/verification.md)

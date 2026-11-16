@@ -1,5 +1,5 @@
 // Package tasks executes the four existing TimeWeaver task types. It has no
-// server or scheduler dependency. Housekeeping intentionally is NOT recursive.
+// server or scheduler dependency. Recursive housekeeping is explicitly opt-in.
 package tasks
 
 import (
@@ -66,7 +66,12 @@ func (e Executor) Run(ctx context.Context, t protocol.Task) (int, *string) {
 		}
 	case "housekeep":
 		if t.HouseKeepDays != nil && *t.HouseKeepDays > 0 && dst != "" {
-			if err = Housekeep(ctx, dst, *t.HouseKeepDays, now); err != nil {
+			if bool(t.HouseKeepRecursive) {
+				err = HousekeepRecursive(ctx, dst, *t.HouseKeepDays, now)
+			} else {
+				err = Housekeep(ctx, dst, *t.HouseKeepDays, now)
+			}
+			if err != nil {
 				return failure(err)
 			}
 		}

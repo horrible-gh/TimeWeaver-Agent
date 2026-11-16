@@ -114,6 +114,7 @@ func (s *State) AcceptSnapshot(generation uint64) bool {
 	}
 	delete(s.fatal, "device_inactive")
 	delete(s.fatal, "device_revoked")
+	delete(s.fatal, "agent_upgrade_required")
 	s.valid = true
 	delete(s.degraded, "snapshot")
 	return true

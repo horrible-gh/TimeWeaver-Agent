@@ -14,7 +14,7 @@ import (
 
 func TestContractHeadersAndBasePath(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/time_weaver/api/agent/v1/heartbeat" || r.Header.Get("Authorization") != "Bearer secret" || r.Header.Get("X-TW-Schema-Version") != "1" {
+		if r.URL.Path != "/time_weaver/api/agent/v1/heartbeat" || r.Header.Get("Authorization") != "Bearer secret" || r.Header.Get("X-TW-Schema-Version") != "1" || r.Header.Get("X-TW-Agent-Capabilities") != "housekeep_recursive_v1" {
 			t.Error(r.URL, r.Header)
 		}
 		fmt.Fprint(w, `{"schema_version":"1","server_time":"2026-08-01T05:00:00Z","data":{"ok":true}}`)

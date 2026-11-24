@@ -27,12 +27,13 @@ jobs:
         name: Verify Linux build without a preinstalled Go toolchain
         shell: bash
         run: |
-          bash -n setup.sh run.sh scripts/build.sh scripts/ensure-go.sh
+          for script in setup.sh run.sh scripts/build.sh scripts/ensure-go.sh; do bash -n "$script"; done
           docker run --rm -v "$PWD:/source:ro" debian:bookworm-slim bash -ec '
             apt-get update -qq
             apt-get install -y --no-install-recommends ca-certificates curl git
             cp -a /source /work
             cd /work
+            git config --global --add safe.directory /work
             ! command -v go
             bash setup.sh --help
             test -x dist/timeweaver-agent

@@ -19,7 +19,8 @@ func TestRecursiveHousekeepNeverTraversesJunction(t *testing.T) {
 	if out, err := exec.Command("cmd.exe", "/D", "/C", "mklink", "/J", junction, outside).CombinedOutput(); err != nil {
 		t.Fatalf("create junction: %v: %s", err, out)
 	}
-	if err := HousekeepRecursive(context.Background(), root, 1, now); err != nil {
+	var report housekeepReport
+	if err := housekeepRecursive(context.Background(), root, 1, now, &report, true); err != nil {
 		t.Fatal(err)
 	}
 	assertHousekeepExists(t, target, true)

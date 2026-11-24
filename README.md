@@ -134,6 +134,14 @@ saves and snapshots for agents without support. Existing settings and credential
 are reused; no re-enrollment is needed. Both scheduled and manual runs use the flag.
 An older server that omits `house_keep_recursive` keeps the previous behavior.
 
+**Delete empty directories** is a separate opt-in option
+(`house_keep_delete_empty_dirs`, capability `housekeep_delete_empty_dirs_v1`).
+With recursion off only direct empty children are removed; with recursion on
+empty subdirectories are removed bottom-up after file cleanup. The root,
+nonempty directories and links/reparse points are never removed. Directory
+age does not matter; retention still governs files, and zero days allows
+empty-directory-only cleanup when this option is on.
+
 Housekeeping does not detect files in use or provide a filesystem security sandbox
 against concurrent directory replacement. Use a dedicated cleanup directory owned
 by the agent account, not arbitrary locations under `/tmp`.

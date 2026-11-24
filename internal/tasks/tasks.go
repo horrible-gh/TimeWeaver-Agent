@@ -65,12 +65,12 @@ func (e Executor) Run(ctx context.Context, t protocol.Task) (int, *string) {
 			return failure(err)
 		}
 	case "housekeep":
-		if t.HouseKeepDays != nil && *t.HouseKeepDays > 0 && dst != "" {
+		if t.HouseKeepDays != nil && (*t.HouseKeepDays > 0 || bool(t.HouseKeepDeleteEmpty)) && dst != "" {
 			var report housekeepReport
 			if bool(t.HouseKeepRecursive) {
-				err = housekeepRecursive(ctx, dst, *t.HouseKeepDays, now, &report)
+				err = housekeepRecursive(ctx, dst, *t.HouseKeepDays, now, &report, bool(t.HouseKeepDeleteEmpty))
 			} else {
-				err = housekeep(ctx, dst, *t.HouseKeepDays, now, &report)
+				err = housekeep(ctx, dst, *t.HouseKeepDays, now, &report, bool(t.HouseKeepDeleteEmpty))
 			}
 			warning := report.message()
 			if err != nil {
@@ -237,16 +237,16 @@ func archive(ctx context.Context, src, dst string) error {
 // directories and permission-denied children are warnings, not fatal errors.
 func Housekeep(ctx context.Context, path string, days int, now time.Time) error {
 	var report housekeepReport
-	err := housekeep(ctx, path, days, now, &report)
+	err := housekeep(ctx, path, days, now, &report, false)
 	report.message()
 	return err
 }
 
-func housekeep(ctx context.Context, path string, days int, now time.Time, report *housekeepReport) error {
+func housekeep(ctx context.Context, path string, days int, now time.Time, report *housekeepReport, deleteEmpty bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if days <= 0 {
+	if days <= 0 && !deleteEmpty {
 		return nil
 	}
 	root, err := filepath.Abs(path)
@@ -280,14 +280,20 @@ func housekeep(ctx context.Context, path string, days int, now time.Time, report
 			}
 			return err
 		}
-		if housekeepLink(info) || !expired(info) {
+		if housekeepLink(info) {
 			continue
 		}
 		if info.IsDir() {
-			report.skip(p, "subfolder excluded")
+			if deleteEmpty {
+				if err := removeEmptyDirectory(ctx, root, p, info, report); err != nil {
+					return err
+				}
+			} else if days > 0 && expired(info) {
+				report.skip(p, "subfolder excluded")
+			}
 			continue
 		}
-		if !info.Mode().IsRegular() {
+		if days <= 0 || !expired(info) || !info.Mode().IsRegular() {
 			continue
 		}
 		current, err := os.Lstat(p)

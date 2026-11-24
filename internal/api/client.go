@@ -21,7 +21,7 @@ import (
 const Prefix = "/api/agent/v1"
 
 // Advertise only implemented behavior; the server gates opt-in task delivery.
-const Capabilities = "housekeep_recursive_v1"
+const Capabilities = "housekeep_recursive_v1,housekeep_delete_empty_dirs_v1"
 const maxResponse = 16 << 20
 
 type Error struct {

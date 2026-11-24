@@ -101,6 +101,7 @@ type Task struct {
 	DestinationDateFormat *string `json:"destination_date_format"`
 	HouseKeepDays         *int    `json:"house_keep_days"`
 	HouseKeepRecursive    Bool    `json:"house_keep_recursive"`
+	HouseKeepDeleteEmpty  Bool    `json:"house_keep_delete_empty_dirs,omitempty"`
 }
 type Detail struct {
 	ID           string      `json:"detail_id"`
@@ -281,8 +282,8 @@ func DecodeSnapshot(e Envelope, etag string, identity Identity) (*Snapshot, erro
 	return &s, nil
 }
 func (t Task) Validate() error {
-	if bool(t.HouseKeepRecursive) && t.Type != "housekeep" {
-		return errors.New("house_keep_recursive requires housekeep task_type")
+	if (bool(t.HouseKeepRecursive) || bool(t.HouseKeepDeleteEmpty)) && t.Type != "housekeep" {
+		return errors.New("housekeep options require housekeep task_type")
 	}
 	if t.HouseKeepDays != nil && *t.HouseKeepDays < 0 {
 		return errors.New("negative house_keep_days")

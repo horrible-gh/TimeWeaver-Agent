@@ -56,7 +56,7 @@ func TestRecursiveHousekeepSkipsPermissionDeniedChildren(t *testing.T) {
 	}
 	defer os.Chmod(readonly, 0700)
 	days := 1
-	code, message := (Executor{Now: func() time.Time { return now }}).Run(context.Background(), protocol.Task{Type: "housekeep", DestinationPath: &root, HouseKeepDays: &days, HouseKeepRecursive: true})
+	code, message := (Executor{Now: func() time.Time { return now }}).Run(context.Background(), protocol.Task{Type: "housekeep", DestinationPath: &root, HouseKeepDays: &days, HouseKeepRecursive: true, HouseKeepDeleteEmpty: true})
 	if code != 0 || message == nil || !strings.HasPrefix(*message, housekeepWarningPrefix) || !strings.Contains(*message, "Skipped 2 path(s)") {
 		t.Fatalf("expected persisted warning, got %d %v", code, message)
 	}

@@ -31,7 +31,15 @@ Registered. Credentials saved. Setup complete.
 
 Use the same device name as the token issued by the web interface. The token is hidden while typing or pasting; press Enter to submit it. Setup saves connection settings and the resulting credential, not the enrollment token. A bare server origin receives the default `/time_weaver` context path; an explicit custom path is preserved.
 
-Go 1.23 or newer must already be installed to build from source. Setup builds the current checkout; it does not pull, install an OS service, or start a second agent. Stop an existing agent before rebuilding on Windows.
+On Linux (amd64/arm64), the build script uses an installed compatible Go toolchain
+if available. Otherwise it downloads a pinned official Go archive, verifies its
+SHA-256 checksum, and installs it under the ignored `dist/toolchains/` directory.
+No sudo, system package changes or global PATH edits are required. The download
+needs HTTPS access to go.dev/dl.google.com and curl or wget, tar and sha256sum.
+Subsequent builds reuse the toolchain. Windows source builds still require
+Go 1.23 or newer installed. Setup builds the current checkout; it does not pull,
+install an OS service, or start a second agent. Stop an existing agent before
+rebuilding on Windows.
 
 Already have a binary? Run `timeweaver-agent setup` directly. Plain `init` also opens the wizard. An interactive first `run` (or launch without arguments) opens setup when configuration or credentials are missing, then starts the agent. Non-interactive service launches never wait for input.
 
@@ -45,7 +53,9 @@ bash run.sh
 .\run.ps1
 ```
 
-These wrappers select the repository working directory automatically. Direct execution is also supported: `./dist/timeweaver-agent run` or `.\dist\timeweaver-agent.exe run`.
+These wrappers select the repository working directory automatically. On Linux,
+if the agent binary is missing, the wrapper builds it first without pulling;
+existing binaries are reused for normal restarts. Direct execution is also supported: `./dist/timeweaver-agent run` or `.\dist\timeweaver-agent.exe run`.
 
 For SpawnPoint, setup prints the actual executable, arguments and working directory to enter. Use the **same OS account** that completed registration. Do not put the one-time token into the permanent startup command/environment.
 

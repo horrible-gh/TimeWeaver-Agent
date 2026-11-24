@@ -23,3 +23,25 @@ jobs:
       - if: runner.os == 'Linux'
         run: go test -race -count=1 ./...
       - run: go build ./cmd/timeweaver-agent
+      - if: runner.os == 'Linux'
+        name: Verify Linux build without a preinstalled Go toolchain
+        shell: bash
+        run: |
+          bash -n setup.sh run.sh scripts/build.sh scripts/ensure-go.sh
+          docker run --rm -v "$PWD:/source:ro" debian:bookworm-slim bash -ec '
+            apt-get update -qq
+            apt-get install -y --no-install-recommends ca-certificates curl git
+            cp -a /source /work
+            cd /work
+            ! command -v go
+            bash setup.sh --help
+            test -x dist/timeweaver-agent
+            test -x dist/toolchains/go1.26.11-linux-$(dpkg --print-architecture)/bin/go
+            ./dist/timeweaver-agent version
+            # No download should be needed on the next build or ordinary run.
+            bash scripts/build.sh --no-pull
+            ./run.sh --help
+            rm dist/timeweaver-agent
+            ./run.sh --help
+            test -x dist/timeweaver-agent
+          '

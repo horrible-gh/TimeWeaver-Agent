@@ -3,7 +3,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
 if [[ ! -x "$ROOT/dist/timeweaver-agent" ]]; then
-  echo 'Agent is not built. Run: bash setup.sh' >&2
-  exit 1
+  echo '[run] Agent is not built; building it from the current checkout...' >&2
+  bash scripts/build.sh --no-pull
 fi
 exec "$ROOT/dist/timeweaver-agent" run "$@"

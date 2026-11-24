@@ -7,9 +7,12 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/horrible-gh/TimeWeaver-Agent/internal/protocol"
 )
 
 func TestRecursiveHousekeepPreservesSpecialFiles(t *testing.T) {
@@ -52,8 +55,10 @@ func TestRecursiveHousekeepSkipsPermissionDeniedChildren(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.Chmod(readonly, 0700)
-	if err := HousekeepRecursive(context.Background(), root, 1, now); err != nil {
-		t.Fatalf("permission-denied children aborted cleanup: %v", err)
+	days := 1
+	code, message := (Executor{Now: func() time.Time { return now }}).Run(context.Background(), protocol.Task{Type: "housekeep", DestinationPath: &root, HouseKeepDays: &days, HouseKeepRecursive: true})
+	if code != 0 || message == nil || !strings.HasPrefix(*message, housekeepWarningPrefix) || !strings.Contains(*message, "Skipped 2 path(s)") {
+		t.Fatalf("expected persisted warning, got %d %v", code, message)
 	}
 	if err := os.Chmod(blocked, 0700); err != nil {
 		t.Fatal(err)
@@ -77,5 +82,12 @@ func TestRecursiveHousekeepRootPermissionErrorStillFails(t *testing.T) {
 	defer os.Chmod(root, 0700)
 	if err := HousekeepRecursive(context.Background(), root, 1, time.Now()); !errors.Is(err, os.ErrPermission) {
 		t.Fatalf("wanted root permission error, got %v", err)
+	}
+	for _, recursive := range []bool{false, true} {
+		days := 1
+		code, message := (Executor{}).Run(context.Background(), protocol.Task{Type: "housekeep", DestinationPath: &root, HouseKeepDays: &days, HouseKeepRecursive: protocol.Bool(recursive)})
+		if code == 0 || message == nil || strings.HasPrefix(*message, housekeepWarningPrefix) {
+			t.Fatal("root failure was swallowed", code, message)
+		}
 	}
 }

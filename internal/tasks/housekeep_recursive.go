@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -16,6 +15,13 @@ import (
 // Like legacy housekeeping this is not in-use-file protection or a filesystem
 // sandbox against an attacker concurrently replacing parent directories.
 func HousekeepRecursive(ctx context.Context, path string, days int, now time.Time) error {
+	var report housekeepReport
+	err := housekeepRecursive(ctx, path, days, now, &report)
+	report.message()
+	return err
+}
+
+func housekeepRecursive(ctx context.Context, path string, days int, now time.Time, report *housekeepReport) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -39,25 +45,6 @@ func HousekeepRecursive(ctx context.Context, path string, days int, now time.Tim
 		modified := info.ModTime()
 		return float64(modified.Unix())+float64(modified.Nanosecond())/1e9 < cutoff
 	}
-	// Permission-denied children should not abort cleanup of unrelated paths.
-	// Summarize once per run so protected system directories do not flood logs.
-	skipped := 0
-	firstSkipped := ""
-	skipDenied := func(candidate string, cause error) bool {
-		if candidate == root || !errors.Is(cause, fs.ErrPermission) {
-			return false
-		}
-		skipped++
-		if firstSkipped == "" {
-			firstSkipped = candidate
-		}
-		return true
-	}
-	defer func() {
-		if skipped > 0 {
-			slog.Warn("recursive housekeep skipped permission-denied paths", "count", skipped, "example_path", firstSkipped)
-		}
-	}()
 	return filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -66,7 +53,7 @@ func HousekeepRecursive(ctx context.Context, path string, days int, now time.Tim
 			if path != root && errors.Is(walkErr, fs.ErrNotExist) {
 				return nil
 			}
-			if skipDenied(path, walkErr) {
+			if report.skipDenied(root, path, walkErr) {
 				return nil
 			}
 			return walkErr
@@ -78,7 +65,7 @@ func HousekeepRecursive(ctx context.Context, path string, days int, now time.Tim
 			if path != root && errors.Is(err, fs.ErrNotExist) {
 				return nil
 			}
-			if skipDenied(path, err) {
+			if report.skipDenied(root, path, err) {
 				return nil
 			}
 			return err
@@ -99,7 +86,7 @@ func HousekeepRecursive(ctx context.Context, path string, days int, now time.Tim
 			return nil
 		}
 		if err != nil {
-			if skipDenied(path, err) {
+			if report.skipDenied(root, path, err) {
 				return nil
 			}
 			return err
@@ -111,7 +98,7 @@ func HousekeepRecursive(ctx context.Context, path string, days int, now time.Tim
 			return err
 		}
 		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			if skipDenied(path, err) {
+			if report.skipDenied(root, path, err) {
 				return nil
 			}
 			return fmt.Errorf("housekeep remove %s: %w", path, err)

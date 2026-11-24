@@ -66,25 +66,33 @@ func (e Executor) Run(ctx context.Context, t protocol.Task) (int, *string) {
 		}
 	case "housekeep":
 		if t.HouseKeepDays != nil && *t.HouseKeepDays > 0 && dst != "" {
+			var report housekeepReport
 			if bool(t.HouseKeepRecursive) {
-				err = HousekeepRecursive(ctx, dst, *t.HouseKeepDays, now)
+				err = housekeepRecursive(ctx, dst, *t.HouseKeepDays, now, &report)
 			} else {
-				err = Housekeep(ctx, dst, *t.HouseKeepDays, now)
+				err = housekeep(ctx, dst, *t.HouseKeepDays, now, &report)
 			}
+			warning := report.message()
 			if err != nil {
 				return failure(err)
 			}
+			// A partial cleanup with safely skipped children is not a failed
+			// task. Preserve the diagnostic in the existing result protocol.
+			return 0, warning
 		}
 	}
 	return 0, nil
 }
 func failure(err error) (int, *string) {
-	s := strings.ToValidUTF8(err.Error(), "�")
+	return -1, resultMessage(err.Error())
+}
+func resultMessage(message string) *string {
+	s := strings.ToValidUTF8(message, "�")
 	r := []rune(s)
 	if len(r) > 8000 {
 		s = string(r[:8000]) + " [truncated]"
 	}
-	return -1, &s
+	return &s
 }
 func text(p *string) string {
 	if p == nil {
@@ -225,37 +233,84 @@ func archive(ctx context.Context, src, dst string) error {
 	return oe
 }
 
-// Housekeep uses file modification time and removes direct children only.
-// Old real directories are an error, as in Python os.remove; no RemoveAll,
-// recursion, active-file detection or new vacuum policy is implied.
+// Housekeep removes expired direct regular-file children only. Skipped
+// directories and permission-denied children are warnings, not fatal errors.
 func Housekeep(ctx context.Context, path string, days int, now time.Time) error {
+	var report housekeepReport
+	err := housekeep(ctx, path, days, now, &report)
+	report.message()
+	return err
+}
+
+func housekeep(ctx context.Context, path string, days int, now time.Time, report *housekeepReport) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if days <= 0 {
 		return nil
 	}
-	items, err := os.ReadDir(path)
+	root, err := filepath.Abs(path)
+	if err != nil {
+		return err
+	}
+	rootInfo, err := os.Lstat(root)
+	if err != nil {
+		return err
+	}
+	if housekeepLink(rootInfo) || !rootInfo.IsDir() {
+		return errors.New("housekeep root must be a directory, not a link or reparse point")
+	}
+	items, err := os.ReadDir(root)
 	if err != nil {
 		return err
 	}
 	cutoff := float64(now.Unix()) + float64(now.Nanosecond())/1e9 - float64(days)*86400
+	expired := func(info fs.FileInfo) bool {
+		return float64(info.ModTime().Unix())+float64(info.ModTime().Nanosecond())/1e9 < cutoff
+	}
 	for _, item := range items {
-		if err = ctx.Err(); err != nil {
+		if err := ctx.Err(); err != nil {
 			return err
 		}
-		p := filepath.Join(path, item.Name())
-		info, err := os.Stat(p)
+		p := filepath.Join(root, item.Name())
+		info, err := item.Info()
 		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) || report.skipDenied(root, p, err) {
+				continue
+			}
 			return err
 		}
-		if float64(info.ModTime().Unix())+float64(info.ModTime().Nanosecond())/1e9 < cutoff {
-			if item.IsDir() {
-				return fmt.Errorf("housekeep does not remove directories: %s", item.Name())
+		if housekeepLink(info) || !expired(info) {
+			continue
+		}
+		if info.IsDir() {
+			report.skip(p, "subfolder excluded")
+			continue
+		}
+		if !info.Mode().IsRegular() {
+			continue
+		}
+		current, err := os.Lstat(p)
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) || report.skipDenied(root, p, err) {
+				continue
 			}
-			if err = os.Remove(p); err != nil {
-				return err
+			return err
+		}
+		if housekeepLink(current) || !current.Mode().IsRegular() || !os.SameFile(info, current) || !expired(current) {
+			continue
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			if report.skipDenied(root, p, err) {
+				continue
 			}
+			return err
 		}
 	}
-	return nil
+	return ctx.Err()
 }
 
 // expand implements the public {date} placeholder and Python's escaped braces.

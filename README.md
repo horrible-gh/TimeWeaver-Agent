@@ -123,7 +123,10 @@ Mock-server tests do not establish a successful connection to your production se
 (including empty ones), symbolic links, Windows junctions/reparse points and special
 files are preserved. Files are judged individually by modification time; an old
 folder never causes its newer files to be deleted. The selected root cannot be a
-link. Permission errors fail the task, and cancellation is checked while walking.
+link. Permission-denied child paths and expired directories excluded by non-recursive
+mode are skipped, with a warning saved in the execution result (code zero).
+An inaccessible or invalid root, other I/O errors, and cancellation still fail
+the task. Shell command failures remain command failures.
 
 Update/build and restart this agent **before** enabling the option on the updated
 server. It advertises `housekeep_recursive_v1`; the server rejects recursive task

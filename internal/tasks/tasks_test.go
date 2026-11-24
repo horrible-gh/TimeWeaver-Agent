@@ -102,8 +102,20 @@ func TestHousekeepAgeAndNoRecursiveDelete(t *testing.T) {
 	_ = os.Mkdir(nested, 0700)
 	_ = os.WriteFile(filepath.Join(nested, "keep"), []byte("keep"), 0600)
 	_ = os.Chtimes(nested, past, past)
-	if e := Housekeep(context.Background(), dir, 1, now); e == nil {
-		t.Fatal("old directory silently removed")
+	other := filepath.Join(dir, "old-after-directory")
+	if err := os.WriteFile(other, []byte("old"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(other, past, past); err != nil {
+		t.Fatal(err)
+	}
+	days := 1
+	code, message := (Executor{Now: func() time.Time { return now }}).Run(context.Background(), protocol.Task{Type: "housekeep", DestinationPath: &dir, HouseKeepDays: &days})
+	if code != 0 || message == nil || !strings.HasPrefix(*message, housekeepWarningPrefix) {
+		t.Fatal("old directory should be a warning", code, message)
+	}
+	if _, err := os.Stat(other); !os.IsNotExist(err) {
+		t.Fatal("cleanup stopped at skipped folder", err)
 	}
 	if _, e := os.Stat(filepath.Join(nested, "keep")); e != nil {
 		t.Fatal(e)
